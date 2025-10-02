@@ -1,80 +1,46 @@
-// const redisClient = require("../config/redis");
 
-// const managerejectedVoteCtrl = {
-//   getRejectedVoteCounts: async (req, res) => {
-//     try {
-//       const pattern = "RejectedVotes:2025_president:*";
-//       let cursor = "0";
-//       let keys = [];
+//__________________________### 2025/10/02 implementation for rejected Vote ###_______________________________________
 
-//       do {
-//         const { cursor: nextCursor, Keys: foundKeys } = await redisClient.scan(
-//           cursor,
-//           "MATCH",
-//           pattern,
-//           "COUNT",
-//           "100"
-//         );
-//         cursor = nextCursor;
-//         keys = keys.concat(foundKeys);
-//       } while (cursor !== "0");
+// server/controller/rejectVoteCount.js
+// Purpose: return rejected vote counts grouped by reason.
 
-//       const result = {};
-//       for (const key of keys) {
-//         const count = await redisClient.get(key);
-//         result[key.replace("RejectedVotes:2025_president", "")] =
-//           parseInt(count);
-//       }
-//       console.log("🟥 Rejected Votes Breakdown:", result);
-//       res.status(200).json(result);
-//     } catch (error) {
-//       console.error("❌ Failed to fetch rejected votes:", error);
-//       res.status(500).json({ message: "Failed to fetch rejected vote counts" });
-//     }
-//   },
-// };
+const redisClient = require("../config/redis");
 
-// module.exports = managerejectedVoteCtrl;
-const redisClient = require("../config/redis"); //
-
-const managerejectedVoteCtrl = {
-  // Controller to get rejected vote counts
+const getRejectedVotesCtrl = {
   getRejectedVoteCount: async (req, res) => {
     try {
-      const electionId = req.query.electionId; // Get electionId from URL query
-
-      // If electionId is not provided, return error
+      const electionId = req.query.electionId;
       if (!electionId) {
         return res.status(400).json({ message: "Election ID is required" });
       }
 
-      // Define key pattern for rejected votes (grouped by reason)
-      const rejectedKeyPattern = `RejectedVotes:${electionId}:*`;
+      const pattern = `RejectedVotes:${electionId}:*`;
+      // Use KEYS here for simplicity (acceptable for moderate keyspace), otherwise SCAN.
+      const keys = await redisClient.keys(pattern);
 
-      // Scan Redis for keys matching the pattern
-      const keys = await redisClient.keys(rejectedKeyPattern);
-
-      // Prepare an object to count each rejection reason
-      const rejectedCounts = {};
-
-      for (const key of keys) {
-        const count = await redisClient.get(key); // Get the count for each key
-        const parts = key.split(":"); // Split to get rejection reason
-        const reason = parts[2]; // Ex: 'invalid_binary', 'missing_separator', etc.
-
-        rejectedCounts[reason] = parseInt(count) || 0;
+      if (!keys || keys.length === 0) {
+        return res.status(200).json({
+          rejectedCounts: {},
+          totalRejected: 0,
+        });
       }
 
-      // Return result as JSON
-      return res.status(200).json({
-        rejectedCounts,
-        totalRejected: Object.values(rejectedCounts).reduce((a, b) => a + b, 0),
-      });
+      const rejectedCounts = {};
+      for (const key of keys) {
+        const val = await redisClient.get(key);
+        const parts = key.split(":");
+        const reason = parts[2] || "unknown";
+        rejectedCounts[reason] = parseInt(val, 10) || 0;
+      }
+
+      const totalRejected = Object.values(rejectedCounts).reduce((a, b) => a + b, 0);
+      console.log("🚫 Rejected counts:", rejectedCounts);
+      return res.status(200).json({ rejectedCounts, totalRejected });
     } catch (err) {
-      console.error("Error fetching rejected votes", err);
+      console.error("❌ Error fetching rejected votes:", err);
       return res.status(500).json({ message: "Internal Server Error" });
     }
   },
 };
 
-module.exports = managerejectedVoteCtrl;
+module.exports = getRejectedVotesCtrl;
