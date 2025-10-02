@@ -43,7 +43,7 @@ router.get(
 router.post("/submit-vote", manageShowVoteCtrl.getshowvot);
 router.get("/get-votes", manageShowVoteCtrl.getVoteCounts);
 
-// for the Rejected Votes
+// for the Rejected Votes 
 router.get(
   "/rejected-vote-counts",
   managerejectedVoteCtrl.getRejectedVoteCount
